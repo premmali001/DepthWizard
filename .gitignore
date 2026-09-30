@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+env/
+.venv/
+
+# Application Data / Outputs (keep samples)
+data/uploads/*
+!data/uploads/.gitkeep
+data/outputs/*
+!data/outputs/.gitkeep
+data/depthwizard.db
+data/depthwizard.db-journal
+
+# Engine / C++ Build artifacts
+engine/build/
+engine/bin/
+*.o
+*.obj
+*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Large local experiment files
+checkpoints/
+outputs/
+results/*
+!results/.gitkeep
+# Evaluation evidence cited by REPORT.md must stay tracked
+!results/evaluation.json
+!results/evaluation.csv
+!results/global_calibration.json
+!results/potsdam_validation_report.json
+!results/baseline_results.json
+!results/training_log.json
+
+# Local datasets - do not upload to GitHub
+data/GAMUS/
+data/train/
+data/validation/
+data/test/
+
+# Large local-only sample rasters (untracked; see README quickstart)
+data/samples/RGB.byte.tif
+data/samples/dem_90m.tif
+data/samples/sample_opengeos_cog.tif
+data/samples/sentinel2_large_crop.tif
+
+# Test cache
+.pytest_cache/
+
+# Local cached datasets / generated cache
+data/cache/

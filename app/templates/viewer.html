@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D TERRAIN FLYTHROUGH // DEPTHWIZARD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css?v=3">
+</head>
+<body class="viewer-layout" data-job-id="{{ job_id }}">
+  <div id="canvas-container">
+    <canvas id="canvas" class="emscripten" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  </div>
+
+  <!-- Telemetry HUD Overlay -->
+  <div class="viewer-hud">
+    <div class="hud-title">
+      <span class="pulse-dot"></span>
+      <span>FLIGHT TELEMETRY HUD</span>
+    </div>
+    <div class="hud-stat">
+      <span>TARGET SCENE:</span>
+      <span class="hud-val" id="hud-filename">Loading...</span>
+    </div>
+    <div class="hud-stat">
+      <span>SPATIAL CRS:</span>
+      <span class="hud-val" id="hud-crs">—</span>
+    </div>
+    <div class="hud-stat">
+      <span>CAMERA ALTITUDE:</span>
+      <span class="hud-val" id="hud-alt" style="color: var(--color-accent);">450 m</span>
+    </div>
+    <div class="hud-stat">
+      <span>COORDINATES (X, Y):</span>
+      <span class="hud-val" id="hud-pos">0, 85</span>
+    </div>
+    <div class="hud-stat">
+      <span>TERRAIN PITCH:</span>
+      <span class="hud-val" id="hud-slope">20°</span>
+    </div>
+    <div class="hud-stat">
+      <span>GROUND SLOPE:</span>
+      <span class="hud-val" id="hud-ground-slope">0°</span>
+    </div>
+    <div class="hud-stat">
+      <span>STRUCTURAL ΔH:</span>
+      <span class="hud-val" id="hud-probe-deltah" style="color: #ffaa00;">STANDBY</span>
+    </div>
+    <div class="hud-stat">
+      <span>SHADING MODE:</span>
+      <span class="hud-val" id="hud-shading" style="color: var(--color-ink);">OPTICAL RGB</span>
+    </div>
+    <div class="hud-stat">
+      <span>GAME MODE:</span>
+      <span class="hud-val" id="hud-mode" style="color: var(--color-ink);">FREE-FLY</span>
+    </div>
+    <div class="hud-stat">
+      <span>AIRSPEED:</span>
+      <span class="hud-val" id="hud-speed" style="color: #ffaa00;">—</span>
+    </div>
+    <div class="hud-stat" style="margin-top: var(--space-2xs); border-top: 2px solid var(--color-rule); padding-top: var(--space-2xs);">
+      <span>ENGINE STATE:</span>
+      <span class="hud-val" id="hud-status" style="color: var(--color-accent-green);">INITIALIZING</span>
+    </div>
+  </div>
+
+  <!-- Flight Controls Help Card -->
+  <div class="viewer-controls-card">
+    <div style="font-family: var(--font-display); font-size: 0.8rem; color: var(--color-ink); font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">
+      FLIGHT NAVIGATION
+    </div>
+    <div><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> — FORWARD / LATERAL VECTOR</div>
+    <div><kbd>Space</kbd> / <kbd>C</kbd> — CLIMB / DESCEND VECTOR</div>
+    <div><kbd>Shift</kbd> — TURBO BOOST (2.5×)</div>
+    <div><kbd>Mouse Drag</kbd> — STEER PITCH / YAW</div>
+    <div style="margin-top: 0.35rem; font-weight: 700;">GAME MODES</div>
+    <div id="hud-mode-fly" style="cursor: pointer;"><kbd>1</kbd> — FREE-FLY INSPECTION CAMERA</div>
+    <div id="hud-mode-plane" style="cursor: pointer;"><kbd>2</kbd> — ARCADE PLANE (W/S THROTTLE)</div>
+    <div id="hud-mode-fps" style="cursor: pointer;"><kbd>3</kbd> — FIRST-PERSON WALKER</div>
+    <div><kbd>V</kbd> — CYCLE MODE · <kbd>R</kbd> — RESET MODE</div>
+    <div id="hud-probe-btn" style="cursor: pointer;"><kbd>P</kbd> — MEASURE STRUCTURAL HEIGHT (ΔH)</div>
+    <div id="hud-shading-btn" style="cursor: pointer;"><kbd>T</kbd> — TOGGLE SATELLITE / HILLSHADE</div>
+    <div id="hud-wireframe-btn" style="cursor: pointer;"><kbd>X</kbd> — TOGGLE WIREFRAME MESH</div>
+  </div>
+
+  <!-- Terrain Analysis Panel -->
+  <div class="viewer-analysis-card" style="position: absolute; z-index: 10;">
+    <h3>TERRAIN ANALYSIS</h3>
+    
+    <div class="analysis-section" id="analysis-point">
+      <button class="analysis-btn" onclick="queryPointElevation()">
+        <span>[POINT ELEVATION]</span>
+        <span>></span>
+      </button>
+      <div id="point-result" style="display:none;" class="analysis-result"></div>
+    </div>
+    
+    <div class="analysis-section" id="analysis-slope">
+      <button class="analysis-btn" hx-get="/api/jobs/{{ job_id }}/analysis/slope_html" hx-target="#slope-result" hx-indicator="#slope-loading">
+        <span>[SLOPE]</span>
+        <span>></span>
+      </button>
+      <div id="slope-loading" class="htmx-indicator" style="font-size:0.7rem; color:var(--color-accent-green);">Generating...</div>
+      <div id="slope-result"></div>
+    </div>
+    
+    <div class="analysis-section" id="analysis-aspect">
+      <button class="analysis-btn" hx-get="/api/jobs/{{ job_id }}/analysis/aspect_html" hx-target="#aspect-result" hx-indicator="#aspect-loading">
+        <span>[ASPECT]</span>
+        <span>></span>
+      </button>
+      <div id="aspect-loading" class="htmx-indicator" style="font-size:0.7rem; color:var(--color-accent-green);">Generating...</div>
+      <div id="aspect-result"></div>
+    </div>
+    
+    <div class="analysis-section" id="analysis-profile">
+      <form hx-get="/api/jobs/{{ job_id }}/analysis/profile_html" hx-target="#profile-result" hx-indicator="#profile-loading" style="display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span>START X,Y:</span>
+          <input type="text" name="start_x" id="prof-sx" class="analysis-input" placeholder="X" required style="width:40px;">
+          <input type="text" name="start_y" id="prof-sy" class="analysis-input" placeholder="Y" required style="width:40px;">
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span>END X,Y:</span>
+          <input type="text" name="end_x" id="prof-ex" class="analysis-input" placeholder="X" required style="width:40px;">
+          <input type="text" name="end_y" id="prof-ey" class="analysis-input" placeholder="Y" required style="width:40px;">
+        </div>
+        <input type="hidden" name="system" value="spatial" id="prof-sys">
+        <button type="button" class="analysis-btn" onclick="useViewerCoordsForProfile()" style="justify-content:center; padding:2px; font-size:0.65rem; color:#00f0ff;">[USE HUD COORDS FOR END]</button>
+        <button type="submit" class="analysis-btn">
+          <span>[ELEVATION PROFILE]</span>
+          <span>></span>
+        </button>
+      </form>
+      <div id="profile-loading" class="htmx-indicator" style="font-size:0.7rem; color:var(--color-accent-green);">Generating...</div>
+      <div id="profile-result"></div>
+    </div>
+    
+    <div class="analysis-section" id="analysis-contours">
+      <form hx-get="/api/jobs/{{ job_id }}/analysis/contours_html" hx-target="#contours-result" hx-indicator="#contours-loading" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>INTERVAL (m):</span>
+        <input type="number" name="interval" value="10" step="1" min="1" class="analysis-input" required>
+        <button type="submit" class="analysis-btn" style="padding:0.2rem;">GO</button>
+      </form>
+      <div id="contours-loading" class="htmx-indicator" style="font-size:0.7rem; color:var(--color-accent-green);">Generating...</div>
+      <div id="contours-result"></div>
+    </div>
+    
+    <div class="analysis-section" id="analysis-export" style="margin-top:var(--space-xs);">
+      <a href="/api/jobs/{{ job_id }}/analysis/export" class="analysis-btn" style="justify-content:center; background-color:var(--color-accent); color:var(--color-accent-ink); font-weight:700; text-decoration:none;" download>
+        [EXPORT TERRAIN DATA (ZIP)]
+      </a>
+    </div>
+  </div>
+
+  <a href="/" class="viewer-exit-btn">← EXIT TO CONSOLE</a>
+
+  <!-- HTMX for API interactions -->
+  <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+
+  <script>
+    // Integration logic
+    const jobId = "{{ job_id }}";
+    
+    async function queryPointElevation() {
+      const hudPosStr = document.getElementById('hud-pos').innerText;
+      if (!hudPosStr || hudPosStr.includes('Loading')) return;
+      
+      const parts = hudPosStr.split(',');
+      if (parts.length < 2) return;
+      
+      const x = parseFloat(parts[0].trim());
+      const y = parseFloat(parts[1].trim());
+      
+      const resDiv = document.getElementById('point-result');
+      resDiv.style.display = 'block';
+      resDiv.innerText = 'Querying...';
+      resDiv.className = 'analysis-result';
+      
+      try {
+        const res = await fetch(`/api/jobs/${jobId}/analysis/point?x=${x}&y=${y}&system=spatial`);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        
+        if (data.is_nodata) {
+          resDiv.innerHTML = `ELEV: <span style="color:var(--color-accent);">NODATA</span><br>COORD: ${data.spatial_x}, ${data.spatial_y}`;
+        } else {
+          resDiv.innerHTML = `ELEV: <span style="color:#fff;">${data.elevation}</span><br>COORD: ${data.spatial_x}, ${data.spatial_y}`;
+        }
+      } catch (e) {
+        resDiv.innerHTML = `ERR: ${e.message}`;
+        resDiv.className = 'analysis-result analysis-error';
+      }
+    }
+
+    let profileClickCount = 0;
+    function useViewerCoordsForProfile() {
+      const hudPosStr = document.getElementById('hud-pos').innerText;
+      if (!hudPosStr || hudPosStr.includes('Loading')) return;
+      const parts = hudPosStr.split(',');
+      if (parts.length < 2) return;
+      const x = parseFloat(parts[0].trim());
+      const y = parseFloat(parts[1].trim());
+      
+      if (profileClickCount % 2 === 0) {
+        document.getElementById('prof-sx').value = x;
+        document.getElementById('prof-sy').value = y;
+        profileClickCount++;
+      } else {
+        document.getElementById('prof-ex').value = x;
+        document.getElementById('prof-ey').value = y;
+        profileClickCount++;
+      }
+    }
+  </script>
+
+  <!-- DepthWizard Raylib C++ WebAssembly Flythrough Engine -->
+  <script src="/static/viewer/viewer.js"></script>
+  <script async src="/static/viewer/raylib_viewer.js"></script>
+</body>
+</html>
